@@ -19,7 +19,8 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -33,7 +34,7 @@ jobs:
           name: HexynLauncher-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Publish APK to Releases (easy download on your phone)
+      - name: Publish APK to Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
