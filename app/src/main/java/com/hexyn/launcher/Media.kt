@@ -6,7 +6,6 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
-import android.service.notification.NotificationListenerService
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -17,12 +16,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
-
-/**
- * Android only lets an app read "now playing" info if it is an enabled notification listener.
- * This service does nothing itself. It only exists so you can grant Notification access once.
- */
-class MediaListenerService : NotificationListenerService()
 
 data class MediaState(
     val title: String,

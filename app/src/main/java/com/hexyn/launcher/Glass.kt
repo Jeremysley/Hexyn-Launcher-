@@ -63,21 +63,31 @@ fun Modifier.glass(shape: Shape, strength: Float = 1f): Modifier {
     val k = strength * S.glass
     return this
         .clip(shape)
-        .background(Color.Black.copy(alpha = alpha(0.16f * k)))
+        .background(Color.Black.copy(alpha = alpha(0.14f * k)))
+        // soft top-to-bottom sheen
         .background(
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = alpha(0.30f * k)),
-                    Color.White.copy(alpha = alpha(0.12f * k)),
+                    Color.White.copy(alpha = alpha(0.26f * k)),
+                    Color.White.copy(alpha = alpha(0.10f * k)),
                 )
             )
         )
+        // diagonal specular highlight from the top-left corner, like iOS liquid glass
+        .background(
+            Brush.linearGradient(
+                0f to Color.White.copy(alpha = alpha(0.24f * k)),
+                0.45f to Color.Transparent,
+                1f to Color.White.copy(alpha = alpha(0.07f * k)),
+            )
+        )
+        // bright rim light on top, fading toward the bottom
         .border(
-            0.8.dp,
+            1.dp,
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = alpha(0.55f * k)),
-                    Color.White.copy(alpha = alpha(0.08f * k)),
+                    Color.White.copy(alpha = alpha(0.75f * k)),
+                    Color.White.copy(alpha = alpha(0.12f * k)),
                 )
             ),
             shape,

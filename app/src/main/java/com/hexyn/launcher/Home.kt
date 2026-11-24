@@ -59,9 +59,12 @@ fun LauncherScreen(
     var controlOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var notifOpen by remember { mutableStateOf(false) }
+    var widgetEdit by remember { mutableStateOf(-1) } // -1 none, 0 calendar, 1 clock
     var folder by remember { mutableStateOf<String?>(null) }
     val battery = rememberBattery()
     val media = rememberNowPlaying(S.islandEnabled && S.islandMusic, resumeTick)
+    val activity = rememberActivity(S.islandEnabled && S.islandActivity)
 
     LaunchedEffect(resumeTick) {
         apps = withContext(Dispatchers.Default) { loadApps(context) }
@@ -79,21 +82,32 @@ fun LauncherScreen(
         controlOpen = false
         searchOpen = false
         settingsOpen = false
+        notifOpen = false
+        widgetEdit = -1
         folder = null
         if (homeTick > 0) pagerState.animateScrollToPage(0)
     }
 
-    val overlayOpen = controlOpen || searchOpen || settingsOpen || folder != null
-    BackHandler(enabled = overlayOpen) {
+    val overlayOpen = controlOpen || notifOpen || searchOpen || settingsOpen || folder != null
+    BackHandler(enabled = overlayOpen || widgetEdit >= 0) {
         when {
+            widgetEdit >= 0 -> widgetEdit = -1
             settingsOpen -> settingsOpen = false
             folder != null -> folder = null
             else -> {
                 controlOpen = false
+                notifOpen = false
                 searchOpen = false
             }
         }
     }
+
+    // While Control Center or Notification Center is open, the home screen is hidden completely.
+    val homeAlpha by animateFloatAsState(
+        targetValue = if (controlOpen || notifOpen) 0f else 1f,
+        animationSpec = tween(250),
+        label = "homeAlpha",
+    )
 
     val blur by animateFloatAsState(
         targetValue = if (overlayOpen) 1f else 0f,
@@ -113,19 +127,23 @@ fun LauncherScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        HomeLayer(
-            pages = pages,
-            dockApps = dockApps,
-            pinned = pinned,
-            allApps = apps,
-            pagerState = pagerState,
-            gesturesEnabled = !overlayOpen,
-            onTogglePin = togglePin,
-            onOpenSearch = { searchOpen = true },
-            onOpenControl = { controlOpen = true },
-            onOpenFolder = { folder = it },
-            onOpenSettings = { settingsOpen = true },
-        )
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = homeAlpha }) {
+            HomeLayer(
+                pages = pages,
+                dockApps = dockApps,
+                pinned = pinned,
+                allApps = apps,
+                pagerState = pagerState,
+                gesturesEnabled = !overlayOpen && widgetEdit < 0,
+                onTogglePin = togglePin,
+                onOpenSearch = { searchOpen = true },
+                onOpenControl = { controlOpen = true },
+                onOpenNotifications = { notifOpen = true },
+                onOpenFolder = { folder = it },
+                onEditCalendar = { widgetEdit = 0 },
+                onEditClock = { widgetEdit = 1 },
+            )
+        }
 
         if (blur > 0.01f) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f * blur)))
@@ -143,6 +161,14 @@ fun LauncherScreen(
                     settingsOpen = true
                 },
             )
+        }
+
+        AnimatedVisibility(
+            visible = notifOpen,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(300)) { -it / 8 },
+            exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { -it / 8 },
+        ) {
+            NotificationCenter(resumeTick = resumeTick, onClose = { notifOpen = false })
         }
 
         AnimatedVisibility(
@@ -172,8 +198,12 @@ fun LauncherScreen(
             SettingsScreen(resumeTick = resumeTick, onClose = { settingsOpen = false })
         }
 
+        if (widgetEdit >= 0) {
+            WidgetEditor(kind = widgetEdit, onClose = { widgetEdit = -1 })
+        }
+
         if (S.customStatusBar) IosStatusBar(battery)
-        if (S.islandEnabled) DynamicIsland(battery, media)
+        if (S.islandEnabled) DynamicIsland(battery, media, activity)
     }
 }
 
@@ -188,8 +218,10 @@ fun HomeLayer(
     onTogglePin: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenControl: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onOpenFolder: (String) -> Unit,
-    onOpenSettings: () -> Unit,
+    onEditCalendar: () -> Unit,
+    onEditClock: () -> Unit,
 ) {
     val topSpace = if (S.customStatusBar || S.islandEnabled) {
         (S.islandTop + S.islandHeight + 18).dp
@@ -205,14 +237,22 @@ fun HomeLayer(
             .pointerInput(gesturesEnabled) {
                 var total = 0f
                 var startX = 0f
+                var startY = 0f
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
                         total = 0f
                         startX = offset.x
+                        startY = offset.y
                     },
                     onDragEnd = {
                         if (gesturesEnabled && total > 140f) {
-                            if (startX > size.width * 0.55f) onOpenControl() else onOpenSearch()
+                            // Upper part of the screen: left half = Notifications,
+                            // right half = Control Center. Lower part = Spotlight search.
+                            when {
+                                startY > size.height * 0.6f -> onOpenSearch()
+                                startX > size.width * 0.5f -> onOpenControl()
+                                else -> onOpenNotifications()
+                            }
                         }
                     },
                     onDragCancel = {},
@@ -232,7 +272,8 @@ fun HomeLayer(
                     showWidgets = page == 0 && S.showWidgets,
                     pinned = pinned,
                     onTogglePin = onTogglePin,
-                    onOpenSettings = onOpenSettings,
+                    onEditCalendar = onEditCalendar,
+                    onEditClock = onEditClock,
                 )
             } else {
                 AppLibraryPage(
@@ -262,15 +303,17 @@ fun AppGridPage(
     showWidgets: Boolean,
     pinned: List<String>,
     onTogglePin: (String) -> Unit,
-    onOpenSettings: () -> Unit,
+    onEditCalendar: () -> Unit,
+    onEditClock: () -> Unit,
 ) {
     val columns = S.columns
     val appRows = if (showWidgets) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         if (showWidgets) {
             WidgetsRow(
-                modifier = Modifier.fillMaxWidth().weight(2f).padding(bottom = 14.dp),
-                onLongPress = onOpenSettings,
+                modifier = Modifier.fillMaxWidth().weight(S.widgetHeight).padding(bottom = 14.dp),
+                onEditCalendar = onEditCalendar,
+                onEditClock = onEditClock,
             )
         }
         for (r in 0 until appRows) {

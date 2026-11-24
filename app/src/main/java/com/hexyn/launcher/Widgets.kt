@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -32,10 +33,17 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Two square glass widgets: Calendar and an analog Clock. Long-press either to open Settings. */
+/**
+ * Two square glass widgets: Calendar and Clock.
+ * Press and hold either one to edit its size, text size and colour.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun WidgetsRow(modifier: Modifier = Modifier, onLongPress: () -> Unit) {
+fun WidgetsRow(
+    modifier: Modifier = Modifier,
+    onEditCalendar: () -> Unit,
+    onEditClock: () -> Unit,
+) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         val calendarModifier = Modifier
             .weight(1f)
@@ -45,7 +53,7 @@ fun WidgetsRow(modifier: Modifier = Modifier, onLongPress: () -> Unit) {
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = {},
-                onLongClick = onLongPress,
+                onLongClick = onEditCalendar,
             )
         CalendarWidget(calendarModifier)
 
@@ -57,9 +65,9 @@ fun WidgetsRow(modifier: Modifier = Modifier, onLongPress: () -> Unit) {
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = {},
-                onLongClick = onLongPress,
+                onLongClick = onEditClock,
             )
-        AnalogClockWidget(clockModifier)
+        ClockWidget(clockModifier)
     }
 }
 
@@ -77,22 +85,62 @@ fun CalendarWidget(modifier: Modifier = Modifier) {
     ) {
         Text(
             text = today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault()).uppercase(),
-            color = Color(0xFFFF453A),
-            fontSize = 13.sp,
+            color = accentColor(S.calAccent),
+            fontSize = S.calWeekSize.sp,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
         )
         Text(
             text = today.dayOfMonth.toString(),
             color = Color.White,
-            fontSize = 60.sp,
+            fontSize = S.calDateSize.sp,
             fontWeight = FontWeight.Light,
+            maxLines = 1,
         )
         Text(
             text = today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())),
             color = Color.White.copy(alpha = 0.75f),
-            fontSize = 13.sp,
+            fontSize = S.calMonthSize.sp,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
         )
+    }
+}
+
+@Composable
+fun ClockWidget(modifier: Modifier = Modifier) {
+    if (S.clockStyle == 0) AnalogClockWidget(modifier) else DigitalClockWidget(modifier)
+}
+
+@Composable
+fun DigitalClockWidget(modifier: Modifier = Modifier) {
+    val time by produceState(LocalTime.now()) {
+        while (true) {
+            value = LocalTime.now()
+            delay(1_000)
+        }
+    }
+    Column(
+        modifier.padding(12.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = time.format(DateTimeFormatter.ofPattern("HH:mm")),
+            color = Color.White,
+            fontSize = S.clockTimeSize.sp,
+            fontWeight = FontWeight.Light,
+            maxLines = 1,
+            softWrap = false,
+        )
+        if (S.clockSeconds) {
+            Text(
+                text = time.format(DateTimeFormatter.ofPattern("ss")),
+                color = accentColor(S.clockAccent),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -107,6 +155,8 @@ fun AnalogClockWidget(modifier: Modifier = Modifier) {
     val hourAngle = ((time.hour % 12) + time.minute / 60f) * 30f
     val minuteAngle = (time.minute + time.second / 60f) * 6f
     val secondAngle = time.second * 6f
+    val accent = accentColor(S.clockAccent)
+    val showSeconds = S.clockSeconds
 
     Canvas(modifier.padding(12.dp).fillMaxSize()) {
         val r = size.minDimension / 2f
@@ -150,7 +200,7 @@ fun AnalogClockWidget(modifier: Modifier = Modifier) {
 
         hand(hourAngle, 0.5f, 7f, Color.White)
         hand(minuteAngle, 0.74f, 5f, Color.White)
-        hand(secondAngle, 0.80f, 2.5f, Color(0xFFFF9F0A))
-        drawCircle(Color(0xFFFF9F0A), radius = 5f, center = c)
+        if (showSeconds) hand(secondAngle, 0.80f, 2.5f, accent)
+        drawCircle(accent, radius = 5f, center = c)
     }
 }

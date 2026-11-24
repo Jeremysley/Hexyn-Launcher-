@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 
 /** Fixed layout values. */
 object Cfg {
@@ -14,25 +15,52 @@ object Cfg {
     const val MAX_DOCK = 4
 }
 
+val ACCENT_NAMES = listOf("Red", "Orange", "Blue", "Green", "White")
+val ACCENT_COLORS = listOf(
+    Color(0xFFFF453A),
+    Color(0xFFFF9F0A),
+    Color(0xFF0A84FF),
+    Color(0xFF34C759),
+    Color.White,
+)
+
+fun accentColor(index: Int): Color = ACCENT_COLORS[index.coerceIn(0, ACCENT_COLORS.lastIndex)]
+
 /**
  * User settings. Every value is Compose state, so the UI updates instantly when you change
- * something in Launcher Settings. Values are saved on the phone.
+ * something in Launcher Settings or the widget editor. Values are saved on the phone.
  */
 object S {
     private var prefs: SharedPreferences? = null
 
+    // Icons and look
     var iconSize by mutableIntStateOf(60)
     var iconStyle by mutableIntStateOf(0) // 0 = squircle, 1 = rounded, 2 = circle
     var showLabels by mutableStateOf(true)
     var columns by mutableIntStateOf(4)
     var glass by mutableFloatStateOf(1f)
     var showWidgets by mutableStateOf(true)
+
+    // Status bar and Dynamic Island
     var customStatusBar by mutableStateOf(true)
     var islandEnabled by mutableStateOf(true)
     var islandWidth by mutableIntStateOf(120)
     var islandHeight by mutableIntStateOf(34)
     var islandTop by mutableIntStateOf(10)
     var islandMusic by mutableStateOf(true)
+    var islandNotifications by mutableStateOf(true)
+    var islandActivity by mutableStateOf(true)
+
+    // Widgets
+    var calWeekSize by mutableIntStateOf(13)
+    var calDateSize by mutableIntStateOf(60)
+    var calMonthSize by mutableIntStateOf(13)
+    var calAccent by mutableIntStateOf(0)
+    var clockStyle by mutableIntStateOf(0) // 0 = analog, 1 = digital
+    var clockTimeSize by mutableIntStateOf(46)
+    var clockSeconds by mutableStateOf(true)
+    var clockAccent by mutableIntStateOf(1)
+    var widgetHeight by mutableFloatStateOf(2f)
 
     fun load(context: Context) {
         val p = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -49,6 +77,17 @@ object S {
         islandHeight = p.getInt("islandHeight", 34)
         islandTop = p.getInt("islandTop", 10)
         islandMusic = p.getBoolean("islandMusic", true)
+        islandNotifications = p.getBoolean("islandNotifications", true)
+        islandActivity = p.getBoolean("islandActivity", true)
+        calWeekSize = p.getInt("calWeekSize", 13)
+        calDateSize = p.getInt("calDateSize", 60)
+        calMonthSize = p.getInt("calMonthSize", 13)
+        calAccent = p.getInt("calAccent", 0)
+        clockStyle = p.getInt("clockStyle", 0)
+        clockTimeSize = p.getInt("clockTimeSize", 46)
+        clockSeconds = p.getBoolean("clockSeconds", true)
+        clockAccent = p.getInt("clockAccent", 1)
+        widgetHeight = p.getFloat("widgetHeight", 2f)
     }
 
     fun save() {
@@ -65,6 +104,17 @@ object S {
             ?.putInt("islandHeight", islandHeight)
             ?.putInt("islandTop", islandTop)
             ?.putBoolean("islandMusic", islandMusic)
+            ?.putBoolean("islandNotifications", islandNotifications)
+            ?.putBoolean("islandActivity", islandActivity)
+            ?.putInt("calWeekSize", calWeekSize)
+            ?.putInt("calDateSize", calDateSize)
+            ?.putInt("calMonthSize", calMonthSize)
+            ?.putInt("calAccent", calAccent)
+            ?.putInt("clockStyle", clockStyle)
+            ?.putInt("clockTimeSize", clockTimeSize)
+            ?.putBoolean("clockSeconds", clockSeconds)
+            ?.putInt("clockAccent", clockAccent)
+            ?.putFloat("widgetHeight", widgetHeight)
             ?.apply()
     }
 
@@ -81,6 +131,17 @@ object S {
         islandHeight = 34
         islandTop = 10
         islandMusic = true
+        islandNotifications = true
+        islandActivity = true
+        calWeekSize = 13
+        calDateSize = 60
+        calMonthSize = 13
+        calAccent = 0
+        clockStyle = 0
+        clockTimeSize = 46
+        clockSeconds = true
+        clockAccent = 1
+        widgetHeight = 2f
         save()
     }
 }

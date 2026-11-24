@@ -120,7 +120,7 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.12f))
+            .background(Color.Black.copy(alpha = 0.55f))
             .pointerInput(Unit) { detectTapGestures { onClose() } }
             .pointerInput(Unit) {
                 var total = 0f

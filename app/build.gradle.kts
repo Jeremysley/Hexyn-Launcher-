@@ -12,8 +12,18 @@ android {
         applicationId = "com.hexyn.launcher"
         minSdk = 27
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.3"
+        versionCode = 5
+        versionName = "0.5"
+    }
+
+    // Fixed key, so a new build installs straight over the old one (no uninstall needed).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {

@@ -2,6 +2,17 @@
 
 An ad-free Android launcher in Kotlin + Jetpack Compose with a frosted-glass look.
 
+## New in 0.5
+- Swipe down on the LEFT side = Notification Center, RIGHT side = Control Center. Both are full layers (home screen hidden). Spotlight: Search pill or swipe down in the lower 40%.
+- Long-press the calendar or clock widget to edit sizes, colours and style.
+- Dynamic Island shows incoming notifications (app icon), the music app icon, "on call", and camera/mic/speaker activity.
+- Notification Center needs Notification access (Settings > Music in the island).
+
+## New in 0.4
+- Fixed signing key (`app/debug.keystore`): new builds install over the old app. Keep your repo PRIVATE.
+- Glassier panels: diagonal specular highlight and brighter rim light.
+- Real app icon, and Settings > Wallpapers: 6 built-in gradient wallpapers for home and lock screen.
+
 ## New in 0.3
 - Launcher Settings: long-press the Calendar or Clock widget, or tap the gear in Control Center.
   Change icon shape/size, columns, glass strength, widgets, status bar, and the Dynamic Island size/position.

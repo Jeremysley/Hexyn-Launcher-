@@ -152,6 +152,20 @@ fun savePinned(context: Context, pinned: List<String>) {
         .apply()
 }
 
+private val iconCache = HashMap<String, ImageBitmap?>()
+
+/** The launcher icon of any installed app (used for notifications and the Dynamic Island). */
+fun loadAppIcon(context: Context, packageName: String): ImageBitmap? {
+    if (iconCache.containsKey(packageName)) return iconCache[packageName]
+    val bitmap = try {
+        renderIcon(context.packageManager.getApplicationIcon(packageName))
+    } catch (e: Exception) {
+        null
+    }
+    iconCache[packageName] = bitmap
+    return bitmap
+}
+
 /** First page has room for the clock widget (2 rows), the rest are full grids. */
 fun paginate(apps: List<AppItem>): List<List<AppItem>> {
     val firstRows = if (S.showWidgets) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS

@@ -35,12 +35,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -56,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -185,12 +190,21 @@ fun BatteryGlyph(battery: BatteryInfo) {
 // Dynamic Island: idle pill, music (compact + full player), charging
 // ------------------------------------------------------------------
 
+private enum class IslandMode { Idle, Music, Call, Camera, Mic, Audio, Battery, Player, Banner }
+
+/**
+ * The Dynamic Island. What it shows, in priority order:
+ * charging, a new notification, the music player (when tapped), a call, camera, microphone,
+ * music playing (app icon + bars), sound playing, otherwise the plain black pill.
+ */
 @Composable
-fun DynamicIsland(battery: BatteryInfo, media: MediaState?) {
+fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivityState) {
+    val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp
     var tapped by remember { mutableStateOf(false) }
     var chargeFlash by remember { mutableStateOf(false) }
     var wasCharging by remember { mutableStateOf(battery.charging) }
+    var banner by remember { mutableStateOf<NotifItem?>(null) }
 
     LaunchedEffect(battery.charging) {
         if (battery.charging && !wasCharging) {
@@ -206,20 +220,39 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?) {
             tapped = false
         }
     }
-
-    val showPlayer = tapped && media != null
-    val showBattery = (tapped && media == null) || chargeFlash
-    val compactMusic = !tapped && !chargeFlash && media != null && media.playing
-
-    val targetWidth: Dp = when {
-        showPlayer -> min(screenWidth - 24, 360).dp
-        showBattery -> min(screenWidth - 60, 310).dp
-        compactMusic -> (S.islandWidth + 76).dp
-        else -> S.islandWidth.dp
+    LaunchedEffect(NotificationStore.bannerId) {
+        val incoming = NotificationStore.banner
+        if (NotificationStore.bannerId > 0 && incoming != null && S.islandNotifications) {
+            banner = incoming
+            delay(3_800)
+            banner = null
+        }
     }
-    val targetHeight: Dp = when {
-        showPlayer -> 150.dp
-        showBattery -> 76.dp
+
+    val mode = when {
+        chargeFlash -> IslandMode.Battery
+        banner != null -> IslandMode.Banner
+        tapped && media != null -> IslandMode.Player
+        tapped -> IslandMode.Battery
+        S.islandActivity && activity.onCall -> IslandMode.Call
+        S.islandActivity && activity.camera -> IslandMode.Camera
+        S.islandActivity && activity.mic -> IslandMode.Mic
+        media != null && media.playing -> IslandMode.Music
+        S.islandActivity && activity.audio -> IslandMode.Audio
+        else -> IslandMode.Idle
+    }
+
+    val targetWidth: Dp = when (mode) {
+        IslandMode.Player, IslandMode.Banner -> min(screenWidth - 24, 360).dp
+        IslandMode.Battery -> min(screenWidth - 60, 310).dp
+        IslandMode.Call -> (S.islandWidth + 100).dp
+        IslandMode.Camera, IslandMode.Mic, IslandMode.Music, IslandMode.Audio ->
+            (S.islandWidth + 76).dp
+        IslandMode.Idle -> S.islandWidth.dp
+    }
+    val targetHeight: Dp = when (mode) {
+        IslandMode.Player -> 150.dp
+        IslandMode.Battery, IslandMode.Banner -> 76.dp
         else -> S.islandHeight.dp
     }
 
@@ -233,7 +266,11 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?) {
         animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow),
         label = "islandHeight",
     )
-    val corner = if (showPlayer) 38.dp else height / 2
+    val corner = if (mode == IslandMode.Player) 38.dp else height / 2
+
+    val mediaIcon = remember(media?.controller?.packageName) {
+        media?.let { loadAppIcon(context, it.controller.packageName) }
+    }
 
     Box(
         Modifier.fillMaxWidth().padding(top = S.islandTop.dp),
@@ -247,39 +284,106 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?) {
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { tapped = !tapped },
+                ) {
+                    if (mode == IslandMode.Banner) {
+                        try {
+                            banner?.intent?.send()
+                        } catch (e: Exception) {
+                            // The app can no longer open this notification.
+                        }
+                        banner = null
+                    } else {
+                        tapped = !tapped
+                    }
+                },
             contentAlignment = Alignment.Center,
         ) {
-            AnimatedVisibility(
-                visible = compactMusic,
-                enter = fadeIn(tween(200)),
-                exit = fadeOut(tween(100)),
-            ) {
-                if (media != null) {
-                    Row(
-                        Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AlbumArt(media, 22.dp, 6.dp)
-                        EqBars(playing = true)
-                    }
+            // Music playing: app icon on the left, bouncing bars on the right.
+            IslandSlot(mode == IslandMode.Music) {
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AppBadge(mediaIcon, 22.dp)
+                    EqBars(playing = true)
                 }
             }
 
-            AnimatedVisibility(
-                visible = showPlayer,
-                enter = fadeIn(tween(250, delayMillis = 120)),
-                exit = fadeOut(tween(100)),
-            ) {
+            // On a call: green phone and a running timer.
+            IslandSlot(mode == IslandMode.Call) {
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(22.dp).clip(CircleShape).background(Color(0xFF34C759)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.Call, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
+                    Text(
+                        text = "%d:%02d".format(activity.callSeconds / 60, activity.callSeconds % 60),
+                        color = Color(0xFF34C759),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            // Camera or microphone in use (green camera, orange microphone, like iOS).
+            IslandSlot(mode == IslandMode.Camera || mode == IslandMode.Mic) {
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        if (activity.camera) {
+                            Icon(
+                                Icons.Rounded.Videocam, null,
+                                tint = Color(0xFF34C759), modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        if (activity.mic) {
+                            Icon(
+                                Icons.Rounded.Mic, null,
+                                tint = Color(0xFFFF9F0A), modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (activity.camera) Color(0xFF34C759) else Color(0xFFFF9F0A))
+                    )
+                }
+            }
+
+            // Some other sound is playing (no music app): speaker and bars.
+            IslandSlot(mode == IslandMode.Audio) {
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Rounded.VolumeUp, null,
+                        tint = Color.White, modifier = Modifier.size(18.dp),
+                    )
+                    EqBars(playing = true, color = Color.White.copy(alpha = 0.85f))
+                }
+            }
+
+            // Full music player after a tap.
+            IslandSlot(mode == IslandMode.Player) {
                 if (media != null) PlayerContent(media)
             }
 
-            AnimatedVisibility(
-                visible = showBattery,
-                enter = fadeIn(tween(250, delayMillis = 120)),
-                exit = fadeOut(tween(100)),
-            ) {
+            // Battery / charging.
+            IslandSlot(mode == IslandMode.Battery) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 26.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -299,6 +403,74 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?) {
                     )
                 }
             }
+
+            // New notification: app icon, title and a line of text.
+            IslandSlot(mode == IslandMode.Banner) {
+                val b = banner
+                if (b != null) {
+                    Row(
+                        Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AppBadge(b.icon, 40.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = b.title.ifBlank { b.appName },
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (b.text.isNotBlank()) {
+                                Text(
+                                    text = b.text,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IslandSlot(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(250, delayMillis = 120)),
+        exit = fadeOut(tween(100)),
+    ) {
+        content()
+    }
+}
+
+/** A small app icon (or a coloured music note when we don't have one). */
+@Composable
+private fun AppBadge(icon: ImageBitmap?, size: Dp) {
+    val shape = RoundedCornerShape(size * 0.28f)
+    if (icon != null) {
+        Image(
+            bitmap = icon,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(shape),
+        )
+    } else {
+        Box(
+            Modifier
+                .size(size)
+                .clip(shape)
+                .background(Brush.verticalGradient(listOf(Color(0xFFFF5E7E), Color(0xFF8E54E9)))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.MusicNote, null, tint = Color.White, modifier = Modifier.size(size * 0.6f))
         }
     }
 }

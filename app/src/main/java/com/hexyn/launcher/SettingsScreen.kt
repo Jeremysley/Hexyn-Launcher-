@@ -5,6 +5,7 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,16 +29,22 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val Green = Color(0xFF34C759)
@@ -90,6 +99,10 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     .padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+                Section("Wallpapers") {
+                    WallpaperRow()
+                }
+
                 Section("Icons") {
                     ChipRow("Shape", listOf("Squircle", "Rounded", "Circle"), S.iconStyle) {
                         S.iconStyle = it
@@ -127,6 +140,14 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     }
                     SwitchRow("Dynamic Island", S.islandEnabled) {
                         S.islandEnabled = it
+                        S.save()
+                    }
+                    SwitchRow("Notifications pop up in the island", S.islandNotifications) {
+                        S.islandNotifications = it
+                        S.save()
+                    }
+                    SwitchRow("Calls, camera and mic in the island", S.islandActivity) {
+                        S.islandActivity = it
                         S.save()
                     }
                     SliderRow("Island width", S.islandWidth.toFloat(), 80f..200f, "${S.islandWidth}") {
@@ -203,12 +224,166 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 }
 
                 Text(
-                    text = "Hexyn Launcher 0.3",
+                    text = "Hexyn Launcher 0.5",
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Press and hold a home-screen widget to open this editor. The widget stays visible above it
+ * and changes live as you move the sliders. kind: 0 = Calendar, 1 = Clock.
+ */
+@Composable
+fun WidgetEditor(kind: Int, onClose: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) { detectTapGestures { onClose() } }
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(Color(0xF2111114))
+                .pointerInput(Unit) { detectTapGestures { } }
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (kind == 0) "Edit Calendar widget" else "Edit Clock widget",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "Done",
+                    color = Blue,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable { onClose() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+
+            Column(
+                Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (kind == 0) {
+                    SliderRow("Day name size", S.calWeekSize.toFloat(), 10f..22f, "${S.calWeekSize}") {
+                        S.calWeekSize = it.roundToInt()
+                        S.save()
+                    }
+                    SliderRow("Date number size", S.calDateSize.toFloat(), 36f..88f, "${S.calDateSize}") {
+                        S.calDateSize = it.roundToInt()
+                        S.save()
+                    }
+                    SliderRow("Month text size", S.calMonthSize.toFloat(), 10f..22f, "${S.calMonthSize}") {
+                        S.calMonthSize = it.roundToInt()
+                        S.save()
+                    }
+                    ChipRow("Accent colour", ACCENT_NAMES, S.calAccent) {
+                        S.calAccent = it
+                        S.save()
+                    }
+                } else {
+                    ChipRow("Style", listOf("Analog", "Digital"), S.clockStyle) {
+                        S.clockStyle = it
+                        S.save()
+                    }
+                    if (S.clockStyle == 1) {
+                        SliderRow("Time size", S.clockTimeSize.toFloat(), 28f..60f, "${S.clockTimeSize}") {
+                            S.clockTimeSize = it.roundToInt()
+                            S.save()
+                        }
+                    }
+                    SwitchRow(if (S.clockStyle == 0) "Second hand" else "Show seconds", S.clockSeconds) {
+                        S.clockSeconds = it
+                        S.save()
+                    }
+                    ChipRow("Accent colour", ACCENT_NAMES, S.clockAccent) {
+                        S.clockAccent = it
+                        S.save()
+                    }
+                }
+                SliderRow(
+                    "Widget height",
+                    S.widgetHeight,
+                    1.6f..2.4f,
+                    String.format("%.1f", S.widgetHeight),
+                ) {
+                    S.widgetHeight = it
+                    S.save()
+                }
+            }
+        }
+    }
+}
+
+/** Tap a swatch to set it as both the home and lock screen wallpaper. */
+@Composable
+private fun WallpaperRow() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(
+            text = "Home and lock screen wallpaper",
+            color = Color.White,
+            fontSize = 16.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            WALLPAPER_PRESETS.forEach { preset ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier
+                            .size(width = 66.dp, height = 116.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(preset.bg1),
+                                        Color(preset.blob1),
+                                        Color(preset.blob2),
+                                    )
+                                )
+                            )
+                            .clickable {
+                                status = "Applying ${preset.name}..."
+                                scope.launch {
+                                    val ok = applyWallpaper(context, preset)
+                                    status = if (ok) "Applied: ${preset.name}" else "Could not set wallpaper"
+                                }
+                            }
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = preset.name,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+        if (status.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(text = status, color = Green, fontSize = 13.sp)
         }
     }
 }
