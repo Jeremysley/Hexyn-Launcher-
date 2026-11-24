@@ -52,6 +52,9 @@ object S {
     var islandMusic by mutableStateOf(true)
     var islandNotifications by mutableStateOf(true)
     var islandActivity by mutableStateOf(true)
+    var islandBluetooth by mutableStateOf(false)
+    var islandLowBattery by mutableStateOf(true)
+    var photoUri by mutableStateOf("")
 
     // Widgets
     var calWeekSize by mutableIntStateOf(13)
@@ -83,6 +86,9 @@ object S {
         islandMusic = p.getBoolean("islandMusic", true)
         islandNotifications = p.getBoolean("islandNotifications", true)
         islandActivity = p.getBoolean("islandActivity", true)
+        islandBluetooth = p.getBoolean("islandBluetooth", false)
+        islandLowBattery = p.getBoolean("islandLowBattery", true)
+        photoUri = p.getString("photoUri", "") ?: ""
         calWeekSize = p.getInt("calWeekSize", 13)
         calDateSize = p.getInt("calDateSize", 60)
         calMonthSize = p.getInt("calMonthSize", 13)
@@ -112,6 +118,9 @@ object S {
             ?.putBoolean("islandMusic", islandMusic)
             ?.putBoolean("islandNotifications", islandNotifications)
             ?.putBoolean("islandActivity", islandActivity)
+            ?.putBoolean("islandBluetooth", islandBluetooth)
+            ?.putBoolean("islandLowBattery", islandLowBattery)
+            ?.putString("photoUri", photoUri)
             ?.putInt("calWeekSize", calWeekSize)
             ?.putInt("calDateSize", calDateSize)
             ?.putInt("calMonthSize", calMonthSize)
@@ -141,6 +150,8 @@ object S {
         islandMusic = true
         islandNotifications = true
         islandActivity = true
+        islandBluetooth = false
+        islandLowBattery = true
         calWeekSize = 13
         calDateSize = 60
         calMonthSize = 13

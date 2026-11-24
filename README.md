@@ -1,3 +1,7 @@
+## New in 0.8
+- Widget stack: swipe the right widget sideways for Clock, Battery, Music and Photo (hold the photo widget to choose a picture).
+- Dynamic Island: low-battery warning (20/10/5%) and Bluetooth connected popup (permission asked in Settings).
+
 ## New in 0.7
 - Control Center 2.0: circular brightness and volume dials, a music panel (art, title, play/pause/skip), a real orientation-lock tile, scrollable layout.
 - Notification Center 2.0: lock-screen style date and clock, notifications grouped by app (tap "more from..." to expand), swipe a card sideways to clear it, long-press to expand its text, animated list.

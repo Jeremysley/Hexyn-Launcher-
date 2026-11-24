@@ -1,6 +1,12 @@
 package com.hexyn.launcher
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,6 +60,11 @@ private val Blue = Color(0xFF0A84FF)
 fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
     val context = LocalContext.current
     val hasAccess = remember(resumeTick) { hasListenerAccess(context) }
+    val btContext = context
+    val btLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        S.islandBluetooth = granted
+        S.save()
+    }
 
     Box(
         Modifier
@@ -158,6 +169,25 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                         S.islandActivity = it
                         S.save()
                     }
+                    SwitchRow("Low-battery warning in the island", S.islandLowBattery) {
+                        S.islandLowBattery = it
+                        S.save()
+                    }
+                    SwitchRow("Bluetooth connection popup in the island", S.islandBluetooth) { on ->
+                        if (!on) {
+                            S.islandBluetooth = false
+                            S.save()
+                        } else if (Build.VERSION.SDK_INT >= 31 &&
+                            ContextCompat.checkSelfPermission(
+                                btContext, Manifest.permission.BLUETOOTH_CONNECT,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            btLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                        } else {
+                            S.islandBluetooth = true
+                            S.save()
+                        }
+                    }
                     SliderRow("Island width", S.islandWidth.toFloat(), 80f..200f, "${S.islandWidth}") {
                         S.islandWidth = it.roundToInt()
                         S.save()
@@ -232,7 +262,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 }
 
                 Text(
-                    text = "Hexyn Launcher 0.7",
+                    text = "Hexyn Launcher 0.8",
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

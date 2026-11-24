@@ -1,6 +1,7 @@
 package com.hexyn.launcher
 
 import android.content.Context
+import androidx.compose.foundation.Canvas
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager

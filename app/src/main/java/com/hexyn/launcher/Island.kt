@@ -3,6 +3,15 @@ package com.hexyn.launcher
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.Context
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.core.content.IntentCompat
+import androidx.core.content.ContextCompat
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.BroadcastReceiver
+import android.bluetooth.BluetoothDevice
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -190,7 +199,7 @@ fun BatteryGlyph(battery: BatteryInfo) {
 // Dynamic Island: idle pill, music (compact + full player), charging
 // ------------------------------------------------------------------
 
-private enum class IslandMode { Idle, Music, Call, Camera, Mic, Audio, Battery, Player, Banner }
+private enum class IslandMode { Idle, Music, Call, Camera, Mic, Audio, Battery, Bluetooth, Player, Banner }
 
 /**
  * The Dynamic Island. What it shows, in priority order:
@@ -205,6 +214,10 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
     var chargeFlash by remember { mutableStateOf(false) }
     var wasCharging by remember { mutableStateOf(battery.charging) }
     var banner by remember { mutableStateOf<NotifItem?>(null) }
+    var lowFlash by remember { mutableStateOf(false) }
+    var btShow by remember { mutableStateOf(false) }
+    var btName by remember { mutableStateOf("") }
+    var btId by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(battery.charging) {
         if (battery.charging && !wasCharging) {
@@ -213,6 +226,56 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
             chargeFlash = false
         }
         wasCharging = battery.charging
+    }
+    // Low-battery warning at 20%, 10% and 5%.
+    LaunchedEffect(battery.level, battery.charging) {
+        val l = battery.level
+        if (S.islandLowBattery && !battery.charging && (l == 20 || l == 10 || l == 5)) {
+            lowFlash = true
+            delay(3_500)
+            lowFlash = false
+        }
+    }
+    // Bluetooth device connected (needs the Bluetooth permission, asked in Settings).
+    DisposableEffect(S.islandBluetooth) {
+        if (!S.islandBluetooth) return@DisposableEffect onDispose { }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) {
+                if (i?.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
+                val device = IntentCompat.getParcelableExtra(i, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                val name = try {
+                    device?.name
+                } catch (e: SecurityException) {
+                    null
+                }
+                btName = name ?: "Bluetooth device"
+                btId++
+            }
+        }
+        try {
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED),
+                ContextCompat.RECEIVER_EXPORTED, // system broadcast
+            )
+        } catch (e: Exception) {
+            // Bluetooth events not available.
+        }
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                // Already gone.
+            }
+        }
+    }
+    LaunchedEffect(btId) {
+        if (btId > 0) {
+            btShow = true
+            delay(3_200)
+            btShow = false
+        }
     }
     LaunchedEffect(tapped) {
         if (tapped) {
@@ -230,7 +293,8 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
     }
 
     val mode = when {
-        chargeFlash -> IslandMode.Battery
+        chargeFlash || lowFlash -> IslandMode.Battery
+        btShow -> IslandMode.Bluetooth
         banner != null -> IslandMode.Banner
         tapped && media != null -> IslandMode.Player
         tapped -> IslandMode.Battery
@@ -244,7 +308,7 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
 
     val targetWidth: Dp = when (mode) {
         IslandMode.Player, IslandMode.Banner -> min(screenWidth - 24, 360).dp
-        IslandMode.Battery -> min(screenWidth - 60, 310).dp
+        IslandMode.Battery, IslandMode.Bluetooth -> min(screenWidth - 60, 310).dp
         IslandMode.Call -> (S.islandWidth + 100).dp
         IslandMode.Camera, IslandMode.Mic, IslandMode.Music, IslandMode.Audio ->
             (S.islandWidth + 76).dp
@@ -252,7 +316,7 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
     }
     val targetHeight: Dp = when (mode) {
         IslandMode.Player -> 150.dp
-        IslandMode.Battery, IslandMode.Banner -> 76.dp
+        IslandMode.Battery, IslandMode.Banner, IslandMode.Bluetooth -> 76.dp
         else -> S.islandHeight.dp
     }
 
@@ -390,17 +454,47 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = if (battery.charging) "Charging" else "Battery",
+                        text = if (battery.charging) "Charging" else if (lowFlash) "Low battery" else "Battery",
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = "${battery.level}%",
-                        color = if (battery.charging) Color(0xFF34C759) else Color.White,
+                        color = if (battery.charging) Color(0xFF34C759) else if (lowFlash) Color(0xFFFF453A) else Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                     )
+                }
+            }
+
+            // Bluetooth device connected.
+            IslandSlot(mode == IslandMode.Bluetooth) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF0A84FF)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.Bluetooth, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = btName,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = "Connected",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                        )
+                    }
                 }
             }
 
