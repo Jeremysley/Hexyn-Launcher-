@@ -155,6 +155,7 @@ fun LauncherScreen(
             exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { -it / 8 },
         ) {
             ControlCenter(
+                media = media,
                 onClose = { controlOpen = false },
                 onOpenSettings = {
                     controlOpen = false

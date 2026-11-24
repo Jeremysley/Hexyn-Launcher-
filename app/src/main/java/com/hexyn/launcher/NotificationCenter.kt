@@ -2,24 +2,12 @@ package com.hexyn.launcher
 
 import android.content.Intent
 import android.provider.Settings
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,28 +17,56 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Pull down on the LEFT side of the home screen. A full-screen layer (the home screen is
- * hidden behind it) listing your notifications. Tap one to open it, X to clear it.
+ * hidden behind it): lock-screen style clock, then your notifications grouped by app.
+ * Swipe a card sideways to clear it, long-press to expand its text, tap to open it.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
     val context = LocalContext.current
     val hasAccess = remember(resumeTick) { hasListenerAccess(context) }
     val list = NotificationStore.items.filter { !it.ongoing }
+    val groups = list.groupBy { it.packageName }.values.toList()
+    val expanded = remember { mutableStateListOf<String>() }
+
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            now = System.currentTimeMillis()
+        }
+    }
+    val timeText = remember(now / 60_000L) { SimpleDateFormat("h:mm", Locale.getDefault()).format(Date(now)) }
+    val dateText = remember(now / 60_000L) { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(now)) }
+
+    val openItem: (NotifItem) -> Unit = { n ->
+        try {
+            n.intent?.send()
+        } catch (e: Exception) {
+            // The app can no longer open this notification.
+        }
+        onClose()
+    }
 
     Box(
         Modifier
@@ -71,8 +87,24 @@ fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(top = 66.dp, start = 16.dp, end = 16.dp)
+                .padding(top = 50.dp, start = 16.dp, end = 16.dp)
         ) {
+            // Lock-screen style header
+            Column(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = dateText,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = timeText,
+                    color = Color.White,
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -80,7 +112,7 @@ fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
                 Text(
                     text = "Notifications",
                     color = Color.White,
-                    fontSize = 30.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
@@ -160,19 +192,65 @@ fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
                     contentPadding = PaddingValues(bottom = 40.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(list, key = { it.key }) { n ->
-                        NotificationCard(
-                            item = n,
-                            onOpen = {
-                                try {
-                                    n.intent?.send()
-                                } catch (e: Exception) {
-                                    // The app can no longer open this notification.
+                    for (group in groups) {
+                        val pkg = group.first().packageName
+                        val isOpen = pkg in expanded
+                        if (group.size == 1 || isOpen) {
+                            items(group, key = { it.key }) { n ->
+                                NotificationCard(
+                                    item = n,
+                                    modifier = Modifier.animateItem(),
+                                    onOpen = { openItem(n) },
+                                    onDismiss = { NotificationStore.dismiss(n.key) },
+                                )
+                            }
+                            if (group.size > 1) {
+                                item(key = "less_$pkg") {
+                                    Text(
+                                        text = "Show less",
+                                        color = Color.White.copy(alpha = 0.75f),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .fillMaxWidth()
+                                            .clickable { expanded.remove(pkg) }
+                                            .padding(vertical = 4.dp),
+                                    )
                                 }
-                                onClose()
-                            },
-                            onDismiss = { NotificationStore.dismiss(n.key) },
-                        )
+                            }
+                        } else {
+                            item(key = "group_$pkg") {
+                                Column(Modifier.animateItem()) {
+                                    NotificationCard(
+                                        item = group.first(),
+                                        modifier = Modifier,
+                                        onOpen = { openItem(group.first()) },
+                                        onDismiss = { group.forEach { NotificationStore.dismiss(it.key) } },
+                                    )
+                                    // peeking stack under the newest card
+                                    Box(
+                                        Modifier
+                                            .padding(horizontal = 14.dp)
+                                            .fillMaxWidth()
+                                            .height(7.dp)
+                                            .glass(RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp), 0.8f)
+                                    )
+                                    Text(
+                                        text = "${group.size - 1} more from ${group.first().appName}",
+                                        color = Color.White.copy(alpha = 0.75f),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { expanded.add(pkg) }
+                                            .padding(vertical = 8.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -180,13 +258,50 @@ fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NotificationCard(item: NotifItem, onOpen: () -> Unit, onDismiss: () -> Unit) {
+private fun NotificationCard(
+    item: NotifItem,
+    modifier: Modifier,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val offset = remember { Animatable(0f) }
+    var expandedText by remember { mutableStateOf(false) }
+
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                translationX = offset.value
+                alpha = 1f - (kotlin.math.abs(offset.value) / 700f).coerceIn(0f, 1f)
+            }
             .glass(RoundedCornerShape(24.dp))
-            .clickable(onClick = onOpen)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        scope.launch {
+                            if (kotlin.math.abs(offset.value) > 220f) {
+                                val dir = if (offset.value > 0f) 1f else -1f
+                                offset.animateTo(dir * 1000f, tween(160))
+                                onDismiss()
+                            } else {
+                                offset.animateTo(0f, spring())
+                            }
+                        }
+                    },
+                    onDragCancel = { scope.launch { offset.animateTo(0f, spring()) } },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        scope.launch { offset.snapTo(offset.value + dx) }
+                    },
+                )
+            }
+            .combinedClickable(
+                onClick = onOpen,
+                onLongClick = { expandedText = !expandedText },
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -238,7 +353,7 @@ private fun NotificationCard(item: NotifItem, onOpen: () -> Unit, onDismiss: () 
                     text = item.text,
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 14.sp,
-                    maxLines = 3,
+                    maxLines = if (expandedText) 12 else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

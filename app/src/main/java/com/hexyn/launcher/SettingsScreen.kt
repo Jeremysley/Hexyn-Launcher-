@@ -232,7 +232,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 }
 
                 Text(
-                    text = "Hexyn Launcher 0.6",
+                    text = "Hexyn Launcher 0.7",
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

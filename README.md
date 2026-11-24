@@ -1,3 +1,7 @@
+## New in 0.7
+- Control Center 2.0: circular brightness and volume dials, a music panel (art, title, play/pause/skip), a real orientation-lock tile, scrollable layout.
+- Notification Center 2.0: lock-screen style date and clock, notifications grouped by app (tap "more from..." to expand), swipe a card sideways to clear it, long-press to expand its text, animated list.
+
 ## New in 0.6
 - Glass: dark or light glass theme, bottom reflection band, and a "Reduce effects" switch for slow phones.
 - Icons: size up to 76, 4/5/6 columns (icons auto-fit their cell).

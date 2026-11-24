@@ -22,6 +22,12 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.unit.*
@@ -32,7 +38,7 @@ import androidx.compose.ui.unit.*
  * The rest open the matching system screen (Android does not let apps flip those switches).
  */
 @Composable
-fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
+fun ControlCenter(media: MediaState?, onClose: () -> Unit, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
 
     // --- Flashlight ---
@@ -112,6 +118,38 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
         }
     }
 
+    // --- Orientation lock (real: needs the same "modify settings" permission as brightness) ---
+    var rotationLocked by remember {
+        mutableStateOf(
+            try {
+                Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1) == 0
+            } catch (e: Exception) {
+                false
+            }
+        )
+    }
+    val toggleRotation: () -> Unit = {
+        if (Settings.System.canWrite(context)) {
+            val lock = !rotationLocked
+            try {
+                Settings.System.putInt(
+                    context.contentResolver,
+                    Settings.System.ACCELEROMETER_ROTATION,
+                    if (lock) 0 else 1,
+                )
+                rotationLocked = lock
+            } catch (e: Exception) {
+                // Could not change rotation.
+            }
+        } else {
+            startSafely(
+                context,
+                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${context.packageName}")),
+            )
+            onClose()
+        }
+    }
+
     val open: (Intent) -> Unit = { intent ->
         startSafely(context, intent)
         onClose()
@@ -140,7 +178,8 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(top = 66.dp, start = sidePadding, end = sidePadding),
+                .verticalScroll(rememberScrollState())
+                .padding(top = 66.dp, start = sidePadding, end = sidePadding, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(gap),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -180,16 +219,23 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
                     }
                 }
 
-                GlassSlider(
+                MusicPanel(
+                    media = media,
+                    modifier = Modifier.size(cell * 2 + gap, cell * 2 + gap),
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                GlassDial(
                     value = brightness,
                     icon = Icons.Rounded.WbSunny,
-                    modifier = Modifier.size(cell, cell * 2 + gap),
+                    modifier = Modifier.size(cell * 2 + gap, cell * 2 + gap),
                     onValueChange = setBrightness,
                 )
-                GlassSlider(
+                GlassDial(
                     value = volume,
                     icon = Icons.Rounded.VolumeUp,
-                    modifier = Modifier.size(cell, cell * 2 + gap),
+                    modifier = Modifier.size(cell * 2 + gap, cell * 2 + gap),
                     onValueChange = setVolume,
                 )
             }
@@ -205,8 +251,8 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
                         }
                     }
                 }
-                ToggleTile(Icons.Rounded.NotificationsOff, false, Modifier.size(cell)) {
-                    open(Intent(Settings.ACTION_SOUND_SETTINGS))
+                ToggleTile(Icons.Rounded.ScreenLockRotation, rotationLocked, Modifier.size(cell)) {
+                    toggleRotation()
                 }
                 ToggleTile(Icons.Rounded.CameraAlt, false, Modifier.size(cell)) {
                     open(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
@@ -223,7 +269,7 @@ fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
                 ToggleTile(Icons.Rounded.Alarm, false, Modifier.size(cell)) {
                     open(Intent(AlarmClock.ACTION_SHOW_ALARMS))
                 }
-                ToggleTile(Icons.Rounded.Smartphone, false, Modifier.size(cell)) {
+                ToggleTile(Icons.Rounded.DarkMode, false, Modifier.size(cell)) {
                     open(Intent(Settings.ACTION_DISPLAY_SETTINGS))
                 }
                 ToggleTile(Icons.Rounded.Settings, false, Modifier.size(cell)) {
@@ -308,5 +354,141 @@ fun GlassSlider(
             tint = if (value > 0.12f) Color(0xFF48484A) else Color.White,
             modifier = Modifier.padding(bottom = 16.dp).size(26.dp),
         )
+    }
+}
+
+/** Circular dial: drag around the ring to set a value (used for brightness and volume). */
+@Composable
+fun GlassDial(
+    value: Float,
+    icon: ImageVector,
+    modifier: Modifier,
+    onValueChange: (Float) -> Unit,
+) {
+    fun dialValue(pos: Offset, size: IntSize): Float {
+        val dx = pos.x - size.width / 2f
+        val dy = pos.y - size.height / 2f
+        var deg = Math.toDegrees(Math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+        if (deg < 0f) deg += 360f
+        val rel = (deg - 135f + 360f) % 360f
+        return when {
+            rel <= 270f -> rel / 270f
+            rel < 315f -> 1f
+            else -> 0f
+        }
+    }
+    Box(
+        modifier
+            .glass(RoundedCornerShape(30.dp), 1.1f)
+            .pointerInput(Unit) {
+                detectTapGestures { offset -> onValueChange(dialValue(offset, size)) }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    onValueChange(dialValue(change.position, size))
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize(0.8f)) {
+            val stroke = 16.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(
+                color = Color.White.copy(alpha = 0.22f),
+                startAngle = 135f,
+                sweepAngle = 270f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+            drawArc(
+                color = Color.White.copy(alpha = 0.95f),
+                startAngle = 135f,
+                sweepAngle = 270f * value.coerceIn(0f, 1f),
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(30.dp))
+    }
+}
+
+/** Now-playing tile with real play / pause / skip buttons. */
+@Composable
+fun MusicPanel(media: MediaState?, modifier: Modifier) {
+    Column(
+        modifier
+            .glass(RoundedCornerShape(30.dp), 1.1f)
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        if (media == null) {
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Rounded.MusicNote, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(34.dp))
+            Text("Not playing", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+        } else {
+            val art = media.art
+            if (art != null) {
+                Image(
+                    bitmap = art,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
+                )
+            } else {
+                Box(
+                    Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.MusicNote, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    media.title,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    media.artist,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.SkipPrevious, null, tint = Color.White,
+                    modifier = Modifier.size(30.dp).clickable { media.controller.transportControls.skipToPrevious() },
+                )
+                Icon(
+                    if (media.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    null, tint = Color.White,
+                    modifier = Modifier.size(36.dp).clickable {
+                        if (media.playing) media.controller.transportControls.pause()
+                        else media.controller.transportControls.play()
+                    },
+                )
+                Icon(
+                    Icons.Rounded.SkipNext, null, tint = Color.White,
+                    modifier = Modifier.size(30.dp).clickable { media.controller.transportControls.skipToNext() },
+                )
+            }
+        }
     }
 }
