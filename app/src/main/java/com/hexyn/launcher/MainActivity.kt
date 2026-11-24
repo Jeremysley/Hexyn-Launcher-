@@ -18,26 +18,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
-/** Quick settings you can change to restyle the launcher. */
-object Cfg {
-    /** Draw our own iOS-style status bar + Dynamic Island and hide the system status bar. */
-    const val CUSTOM_STATUS_BAR = true
-
-    const val ISLAND_WIDTH_DP = 120
-    const val ISLAND_HEIGHT_DP = 34
-    const val ISLAND_TOP_DP = 10
-
-    const val GRID_COLUMNS = 4
-    const val HOME_ROWS = 6
-    const val MAX_DOCK = 4
-}
-
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
     private var homeTick by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        S.load(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val lp = window.attributes
@@ -57,6 +44,7 @@ class MainActivity : ComponentActivity() {
                     resumeTick = resumeTick,
                     homeTick = homeTick,
                     onBlur = { px -> setBlur(px) },
+                    onSystemBars = { applySystemBars() },
                 )
             }
         }
@@ -65,7 +53,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        resumeTick++ // refresh app list after installs / uninstalls
+        resumeTick++ // refresh app list and music access after installs / settings changes
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -84,7 +72,7 @@ class MainActivity : ComponentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.isAppearanceLightStatusBars = false
         controller.isAppearanceLightNavigationBars = false
-        if (Cfg.CUSTOM_STATUS_BAR) {
+        if (S.customStatusBar) {
             controller.hide(WindowInsetsCompat.Type.statusBars())
         } else {
             controller.show(WindowInsetsCompat.Type.statusBars())

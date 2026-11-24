@@ -112,7 +112,7 @@ fun SpotlightOverlay(apps: List<AppItem>, onClose: () -> Unit) {
                             Image(
                                 bitmap = app.icon,
                                 contentDescription = null,
-                                modifier = Modifier.size(40.dp).clip(IconShape),
+                                modifier = Modifier.size(40.dp).clip(iconShape()),
                             )
                             Spacer(Modifier.width(14.dp))
                             Text(

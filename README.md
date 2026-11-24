@@ -2,6 +2,14 @@
 
 An ad-free Android launcher in Kotlin + Jetpack Compose with a frosted-glass look.
 
+## New in 0.3
+- Launcher Settings: long-press the Calendar or Clock widget, or tap the gear in Control Center.
+  Change icon shape/size, columns, glass strength, widgets, status bar, and the Dynamic Island size/position.
+- Music in the Dynamic Island (album art + bouncing bars; tap for play/pause/next/previous).
+  Needs Notification access: Settings > Open notification access > turn on Hexyn Launcher.
+  On Android 13+: Settings > Apps > Hexyn Launcher > three dots > Allow restricted settings first.
+- More iOS-like look: squircle icons with gloss, calendar widget, analog clock widget.
+
 ## Features
 - Home pages with a glass clock widget, squircle icons, page dots, Search pill and glass Dock
 - App Library page (last page): apps grouped into glass category cards, tap to open

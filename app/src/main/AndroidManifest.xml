@@ -47,5 +47,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Lets the Dynamic Island read the song that's playing (you grant access once in Settings) -->
+        <service
+            android:name=".MediaListenerService"
+            android:exported="true"
+            android:label="Hexyn Launcher"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

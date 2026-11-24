@@ -154,8 +154,9 @@ fun savePinned(context: Context, pinned: List<String>) {
 
 /** First page has room for the clock widget (2 rows), the rest are full grids. */
 fun paginate(apps: List<AppItem>): List<List<AppItem>> {
-    val firstPage = Cfg.GRID_COLUMNS * (Cfg.HOME_ROWS - 2)
-    val perPage = Cfg.GRID_COLUMNS * Cfg.HOME_ROWS
+    val firstRows = if (S.showWidgets) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS
+    val firstPage = S.columns * firstRows
+    val perPage = S.columns * Cfg.HOME_ROWS
     if (apps.size <= firstPage) return listOf(apps)
     return listOf(apps.take(firstPage)) + apps.drop(firstPage).chunked(perPage)
 }

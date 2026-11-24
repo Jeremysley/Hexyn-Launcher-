@@ -4,8 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -34,12 +32,7 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-
-val IconShape = RoundedCornerShape(22)
 
 val ShadowText = TextStyle(
     shadow = Shadow(
@@ -50,44 +43,55 @@ val ShadowText = TextStyle(
 )
 
 // ------------------------------------------------------------------
-// Root screen: home pages + overlays (Control Center, Search, Folders)
+// Root screen: home pages + overlays (Control Center, Search, Folders, Settings)
 // ------------------------------------------------------------------
 
 @Composable
-fun LauncherScreen(resumeTick: Int, homeTick: Int, onBlur: (Int) -> Unit) {
+fun LauncherScreen(
+    resumeTick: Int,
+    homeTick: Int,
+    onBlur: (Int) -> Unit,
+    onSystemBars: () -> Unit,
+) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf(emptyList<AppItem>()) }
     var pinned by remember { mutableStateOf(loadPinned(context)) }
     var controlOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
     var folder by remember { mutableStateOf<String?>(null) }
     val battery = rememberBattery()
+    val media = rememberNowPlaying(S.islandEnabled && S.islandMusic, resumeTick)
 
     LaunchedEffect(resumeTick) {
         apps = withContext(Dispatchers.Default) { loadApps(context) }
     }
+    LaunchedEffect(S.customStatusBar) { onSystemBars() }
 
     val homeApps = remember(apps, pinned) { apps.filter { it.packageName !in pinned } }
     val dockApps = remember(apps, pinned) {
         pinned.mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
     }
-    val pages = remember(homeApps) { paginate(homeApps) }
+    val pages = remember(homeApps, S.columns, S.showWidgets) { paginate(homeApps) }
     val pagerState = rememberPagerState(pageCount = { pages.size + 1 })
 
     LaunchedEffect(homeTick) {
         controlOpen = false
         searchOpen = false
+        settingsOpen = false
         folder = null
         if (homeTick > 0) pagerState.animateScrollToPage(0)
     }
 
-    val overlayOpen = controlOpen || searchOpen || folder != null
+    val overlayOpen = controlOpen || searchOpen || settingsOpen || folder != null
     BackHandler(enabled = overlayOpen) {
-        if (folder != null) {
-            folder = null
-        } else {
-            controlOpen = false
-            searchOpen = false
+        when {
+            settingsOpen -> settingsOpen = false
+            folder != null -> folder = null
+            else -> {
+                controlOpen = false
+                searchOpen = false
+            }
         }
     }
 
@@ -120,6 +124,7 @@ fun LauncherScreen(resumeTick: Int, homeTick: Int, onBlur: (Int) -> Unit) {
             onOpenSearch = { searchOpen = true },
             onOpenControl = { controlOpen = true },
             onOpenFolder = { folder = it },
+            onOpenSettings = { settingsOpen = true },
         )
 
         if (blur > 0.01f) {
@@ -131,7 +136,13 @@ fun LauncherScreen(resumeTick: Int, homeTick: Int, onBlur: (Int) -> Unit) {
             enter = fadeIn(tween(200)) + slideInVertically(tween(300)) { -it / 8 },
             exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { -it / 8 },
         ) {
-            ControlCenter(onClose = { controlOpen = false })
+            ControlCenter(
+                onClose = { controlOpen = false },
+                onOpenSettings = {
+                    controlOpen = false
+                    settingsOpen = true
+                },
+            )
         }
 
         AnimatedVisibility(
@@ -153,10 +164,16 @@ fun LauncherScreen(resumeTick: Int, homeTick: Int, onBlur: (Int) -> Unit) {
             )
         }
 
-        if (Cfg.CUSTOM_STATUS_BAR) {
-            IosStatusBar(battery)
-            DynamicIsland(battery)
+        AnimatedVisibility(
+            visible = settingsOpen,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(300)) { it / 8 },
+            exit = fadeOut(tween(150)),
+        ) {
+            SettingsScreen(resumeTick = resumeTick, onClose = { settingsOpen = false })
         }
+
+        if (S.customStatusBar) IosStatusBar(battery)
+        if (S.islandEnabled) DynamicIsland(battery, media)
     }
 }
 
@@ -172,7 +189,14 @@ fun HomeLayer(
     onOpenSearch: () -> Unit,
     onOpenControl: () -> Unit,
     onOpenFolder: (String) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
+    val topSpace = if (S.customStatusBar || S.islandEnabled) {
+        (S.islandTop + S.islandHeight + 18).dp
+    } else {
+        12.dp
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -196,7 +220,7 @@ fun HomeLayer(
                 )
             }
     ) {
-        Spacer(Modifier.height(if (Cfg.CUSTOM_STATUS_BAR) 62.dp else 12.dp))
+        Spacer(Modifier.height(topSpace))
 
         HorizontalPager(
             state = pagerState,
@@ -205,9 +229,10 @@ fun HomeLayer(
             if (page < pages.size) {
                 AppGridPage(
                     apps = pages[page],
-                    showWidget = page == 0,
+                    showWidgets = page == 0 && S.showWidgets,
                     pinned = pinned,
                     onTogglePin = onTogglePin,
+                    onOpenSettings = onOpenSettings,
                 )
             } else {
                 AppLibraryPage(
@@ -234,19 +259,24 @@ fun HomeLayer(
 @Composable
 fun AppGridPage(
     apps: List<AppItem>,
-    showWidget: Boolean,
+    showWidgets: Boolean,
     pinned: List<String>,
     onTogglePin: (String) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
-    val appRows = if (showWidget) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS
+    val columns = S.columns
+    val appRows = if (showWidgets) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        if (showWidget) {
-            ClockWidget(Modifier.fillMaxWidth().weight(2f).padding(bottom = 14.dp))
+        if (showWidgets) {
+            WidgetsRow(
+                modifier = Modifier.fillMaxWidth().weight(2f).padding(bottom = 14.dp),
+                onLongPress = onOpenSettings,
+            )
         }
         for (r in 0 until appRows) {
             Row(Modifier.fillMaxWidth().weight(1f)) {
-                for (c in 0 until Cfg.GRID_COLUMNS) {
-                    val app = apps.getOrNull(r * Cfg.GRID_COLUMNS + c)
+                for (c in 0 until columns) {
+                    val app = apps.getOrNull(r * columns + c)
                     Box(
                         Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp),
                         contentAlignment = Alignment.TopCenter,
@@ -262,51 +292,6 @@ fun AppGridPage(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun ClockWidget(modifier: Modifier = Modifier) {
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(5_000)
-        }
-    }
-    Row(
-        modifier
-            .glass(RoundedCornerShape(28.dp))
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column {
-            Text(
-                text = now.format(DateTimeFormatter.ofPattern("EEEE")).uppercase(),
-                color = Color(0xFFFF6B6B),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = now.dayOfMonth.toString(),
-                color = Color.White,
-                fontSize = 52.sp,
-                fontWeight = FontWeight.Light,
-            )
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = now.format(DateTimeFormatter.ofPattern("HH:mm")),
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Light,
-            )
-            Text(
-                text = now.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp,
-            )
         }
     }
 }
@@ -359,9 +344,9 @@ fun Dock(dockApps: List<AppItem>, onTogglePin: (String) -> Unit) {
         Modifier
             .padding(horizontal = 14.dp)
             .fillMaxWidth()
-            .glass(RoundedCornerShape(34.dp))
+            .glass(RoundedCornerShape(36.dp))
             .padding(vertical = 12.dp, horizontal = 8.dp)
-            .heightIn(min = 56.dp),
+            .heightIn(min = S.iconSize.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -385,7 +370,7 @@ fun Dock(dockApps: List<AppItem>, onTogglePin: (String) -> Unit) {
 }
 
 // ------------------------------------------------------------------
-// App icon with press animation, zoom-launch and long-press menu
+// App icon with gloss, press animation, zoom-launch and long-press menu
 // ------------------------------------------------------------------
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -396,13 +381,14 @@ fun AppIcon(
     canPin: Boolean,
     onTogglePin: () -> Unit,
     modifier: Modifier = Modifier,
-    iconSize: Dp = 56.dp,
-    showLabel: Boolean = true,
+    iconSize: Dp = S.iconSize.dp,
+    showLabel: Boolean = S.showLabels,
     onLaunched: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     val haptics = LocalHapticFeedback.current
+    val shape = iconShape()
     var menuOpen by remember { mutableStateOf(false) }
     var bounds by remember { mutableStateOf<Rect?>(null) }
     val interaction = remember { MutableInteractionSource() }
@@ -438,14 +424,14 @@ fun AppIcon(
                 Modifier
                     .size(iconSize)
                     .onGloballyPositioned { bounds = it.boundsInWindow() }
-                    .shadow(5.dp, IconShape, clip = false)
-                    .clip(IconShape)
+                    .shadow(6.dp, shape, clip = false)
+                    .clip(shape)
                     .border(
-                        0.6.dp,
+                        0.7.dp,
                         Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.4f), Color.White.copy(alpha = 0.04f))
+                            listOf(Color.White.copy(alpha = 0.45f), Color.White.copy(alpha = 0.04f))
                         ),
-                        IconShape,
+                        shape,
                     )
             ) {
                 Image(
@@ -453,12 +439,24 @@ fun AppIcon(
                     contentDescription = app.label,
                     modifier = Modifier.fillMaxSize(),
                 )
+                // Soft glossy highlight across the top half, like iOS icons.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.White.copy(alpha = 0.20f),
+                                0.5f to Color.Transparent,
+                            )
+                        )
+                )
             }
             if (showLabel) {
                 Text(
                     text = app.label,
                     color = Color.White,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
@@ -515,7 +513,7 @@ fun AppIcon(
 }
 
 // ------------------------------------------------------------------
-// Status bar + Dynamic Island
+// Battery
 // ------------------------------------------------------------------
 
 data class BatteryInfo(val level: Int, val charging: Boolean)
@@ -553,176 +551,4 @@ fun rememberBattery(): BatteryInfo {
         onDispose { context.unregisterReceiver(receiver) }
     }
     return info
-}
-
-private fun networkKind(context: Context): String {
-    return try {
-        val cm = context.getSystemService(ConnectivityManager::class.java)
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-        when {
-            caps == null -> "none"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
-            else -> "none"
-        }
-    } catch (e: Exception) {
-        "none"
-    }
-}
-
-@Composable
-fun IosStatusBar(battery: BatteryInfo) {
-    val context = LocalContext.current
-    val is24 = remember { android.text.format.DateFormat.is24HourFormat(context) }
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(1_000)
-        }
-    }
-    val net by produceState("none") {
-        while (true) {
-            value = networkKind(context)
-            delay(4_000)
-        }
-    }
-    val timeText = now.format(DateTimeFormatter.ofPattern(if (is24) "HH:mm" else "h:mm"))
-
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = Cfg.ISLAND_TOP_DP.dp)
-            .height(Cfg.ISLAND_HEIGHT_DP.dp)
-            .padding(horizontal = 30.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = timeText,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            style = ShadowText,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (net == "wifi") {
-                Icon(Icons.Rounded.Wifi, null, tint = Color.White, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
-            } else if (net == "cell") {
-                Icon(
-                    Icons.Rounded.SignalCellularAlt,
-                    null,
-                    tint = Color.White,
-                    modifier = Modifier.size(17.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-            }
-            BatteryGlyph(battery)
-        }
-    }
-}
-
-@Composable
-fun BatteryGlyph(battery: BatteryInfo) {
-    val fill = when {
-        battery.charging -> Color(0xFF34C759)
-        battery.level <= 20 -> Color(0xFFFF3B30)
-        else -> Color.White
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "${battery.level}",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            style = ShadowText,
-        )
-        Spacer(Modifier.width(4.dp))
-        Box(
-            Modifier
-                .size(width = 25.dp, height = 12.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(4.dp))
-                .padding(1.5.dp)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(battery.level.coerceIn(0, 100) / 100f)
-                    .background(fill, RoundedCornerShape(2.5.dp))
-            )
-        }
-        Spacer(Modifier.width(1.dp))
-        Box(
-            Modifier
-                .size(width = 1.5.dp, height = 4.dp)
-                .background(
-                    Color.White.copy(alpha = 0.45f),
-                    RoundedCornerShape(topEnd = 1.dp, bottomEnd = 1.dp),
-                )
-        )
-    }
-}
-
-@Composable
-fun DynamicIsland(battery: BatteryInfo) {
-    var expanded by remember { mutableStateOf(false) }
-    var wasCharging by remember { mutableStateOf(battery.charging) }
-
-    LaunchedEffect(battery.charging) {
-        if (battery.charging && !wasCharging) {
-            expanded = true
-            delay(3_200)
-            expanded = false
-        }
-        wasCharging = battery.charging
-    }
-
-    val width by animateDpAsState(
-        targetValue = if (expanded) 310.dp else Cfg.ISLAND_WIDTH_DP.dp,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow),
-        label = "islandWidth",
-    )
-    val height by animateDpAsState(
-        targetValue = if (expanded) 76.dp else Cfg.ISLAND_HEIGHT_DP.dp,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow),
-        label = "islandHeight",
-    )
-
-    Box(
-        Modifier.fillMaxWidth().padding(top = Cfg.ISLAND_TOP_DP.dp),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        Box(
-            Modifier
-                .size(width, height)
-                .clip(RoundedCornerShape(50))
-                .background(Color.Black)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { expanded = !expanded },
-            contentAlignment = Alignment.Center,
-        ) {
-            AnimatedVisibility(visible = expanded, enter = fadeIn(), exit = fadeOut()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 26.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (battery.charging) "Charging" else "Battery",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "${battery.level}%",
-                        color = if (battery.charging) Color(0xFF34C759) else Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-    }
 }

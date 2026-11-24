@@ -101,7 +101,7 @@ fun FolderCard(title: String, apps: List<AppItem>, onClick: () -> Unit) {
                                 Image(
                                     bitmap = app.icon,
                                     contentDescription = null,
-                                    modifier = Modifier.fillMaxSize().clip(IconShape),
+                                    modifier = Modifier.fillMaxSize().clip(iconShape()),
                                 )
                             }
                         }

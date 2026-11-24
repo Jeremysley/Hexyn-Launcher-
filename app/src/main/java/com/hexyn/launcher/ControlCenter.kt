@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.*
  * The rest open the matching system screen (Android does not let apps flip those switches).
  */
 @Composable
-fun ControlCenter(onClose: () -> Unit) {
+fun ControlCenter(onClose: () -> Unit, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
 
     // --- Flashlight ---
@@ -227,7 +227,7 @@ fun ControlCenter(onClose: () -> Unit) {
                     open(Intent(Settings.ACTION_DISPLAY_SETTINGS))
                 }
                 ToggleTile(Icons.Rounded.Settings, false, Modifier.size(cell)) {
-                    open(Intent(Settings.ACTION_SETTINGS))
+                    onOpenSettings() // Hexyn Launcher settings
                 }
             }
         }
