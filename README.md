@@ -1,6 +1,8 @@
-# Hexyn Launcher (glass / iOS-inspired)
-
-An ad-free Android launcher in Kotlin + Jetpack Compose with a frosted-glass look.
+## New in 0.6
+- Glass: dark or light glass theme, bottom reflection band, and a "Reduce effects" switch for slow phones.
+- Icons: size up to 76, 4/5/6 columns (icons auto-fit their cell).
+- Floating dock with a stronger glass look.
+- Folders open with a spring zoom animation.
 
 ## New in 0.5
 - Swipe down on the LEFT side = Notification Center, RIGHT side = Control Center. Both are full layers (home screen hidden). Spotlight: Search pill or swipe down in the lower 40%.

@@ -108,11 +108,11 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                         S.iconStyle = it
                         S.save()
                     }
-                    SliderRow("Icon size", S.iconSize.toFloat(), 48f..68f, "${S.iconSize}") {
+                    SliderRow("Icon size", S.iconSize.toFloat(), 48f..76f, "${S.iconSize}") {
                         S.iconSize = it.roundToInt()
                         S.save()
                     }
-                    ChipRow("Columns", listOf("4", "5"), S.columns - 4) {
+                    ChipRow("Columns", listOf("4", "5", "6"), S.columns - 4) {
                         S.columns = it + 4
                         S.save()
                     }
@@ -125,6 +125,14 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 Section("Look") {
                     SliderRow("Glass strength", S.glass, 0.5f..1.6f, "${(S.glass * 100).roundToInt()}%") {
                         S.glass = it
+                        S.save()
+                    }
+                    ChipRow("Glass theme", listOf("Dark glass", "Light glass"), if (S.glassLight) 1 else 0) {
+                        S.glassLight = it == 1
+                        S.save()
+                    }
+                    SwitchRow("Reduce effects (faster on slow phones)", S.reduceEffects) {
+                        S.reduceEffects = it
                         S.save()
                     }
                     SwitchRow("Home widgets (calendar and clock)", S.showWidgets) {
@@ -224,7 +232,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 }
 
                 Text(
-                    text = "Hexyn Launcher 0.5",
+                    text = "Hexyn Launcher 0.6",
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

@@ -39,6 +39,8 @@ object S {
     var showLabels by mutableStateOf(true)
     var columns by mutableIntStateOf(4)
     var glass by mutableFloatStateOf(1f)
+    var glassLight by mutableStateOf(false)
+    var reduceEffects by mutableStateOf(false)
     var showWidgets by mutableStateOf(true)
 
     // Status bar and Dynamic Island
@@ -70,6 +72,8 @@ object S {
         showLabels = p.getBoolean("showLabels", true)
         columns = p.getInt("columns", 4)
         glass = p.getFloat("glass", 1f)
+        glassLight = p.getBoolean("glassLight", false)
+        reduceEffects = p.getBoolean("reduceEffects", false)
         showWidgets = p.getBoolean("showWidgets", true)
         customStatusBar = p.getBoolean("customStatusBar", true)
         islandEnabled = p.getBoolean("islandEnabled", true)
@@ -97,6 +101,8 @@ object S {
             ?.putBoolean("showLabels", showLabels)
             ?.putInt("columns", columns)
             ?.putFloat("glass", glass)
+            ?.putBoolean("glassLight", glassLight)
+            ?.putBoolean("reduceEffects", reduceEffects)
             ?.putBoolean("showWidgets", showWidgets)
             ?.putBoolean("customStatusBar", customStatusBar)
             ?.putBoolean("islandEnabled", islandEnabled)
@@ -124,6 +130,8 @@ object S {
         showLabels = true
         columns = 4
         glass = 1f
+        glassLight = false
+        reduceEffects = false
         showWidgets = true
         customStatusBar = true
         islandEnabled = true

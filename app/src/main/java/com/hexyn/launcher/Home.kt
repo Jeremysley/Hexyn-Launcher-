@@ -180,10 +180,16 @@ fun LauncherScreen(
         }
 
         val openFolder = folder
-        if (openFolder != null) {
+        val lastFolder = remember { arrayOf("") }
+        if (openFolder != null) lastFolder[0] = openFolder
+        AnimatedVisibility(
+            visible = openFolder != null,
+            enter = fadeIn(tween(180)) + scaleIn(spring(dampingRatio = 0.7f, stiffness = 400f), initialScale = 0.85f),
+            exit = fadeOut(tween(140)) + scaleOut(tween(160), targetScale = 0.9f),
+        ) {
             FolderOverlay(
-                title = openFolder,
-                apps = apps.filter { it.category == openFolder },
+                title = lastFolder[0],
+                apps = apps.filter { it.category == lastFolder[0] },
                 pinned = pinned,
                 onTogglePin = togglePin,
                 onClose = { folder = null },
@@ -308,6 +314,9 @@ fun AppGridPage(
 ) {
     val columns = S.columns
     val appRows = if (showWidgets) Cfg.HOME_ROWS - 2 else Cfg.HOME_ROWS
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Keep icons inside their cell when many columns are used.
+    val cellIcon = minOf(S.iconSize.dp, (maxWidth - 28.dp) / columns - 6.dp)
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         if (showWidgets) {
             WidgetsRow(
@@ -330,12 +339,14 @@ fun AppGridPage(
                                 pinned = false,
                                 canPin = pinned.size < Cfg.MAX_DOCK,
                                 onTogglePin = { onTogglePin(app.packageName) },
+                                iconSize = cellIcon,
                             )
                         }
                     }
                 }
             }
         }
+    }
     }
 }
 
@@ -385,9 +396,9 @@ fun SearchPill(onClick: () -> Unit) {
 fun Dock(dockApps: List<AppItem>, onTogglePin: (String) -> Unit) {
     Row(
         Modifier
-            .padding(horizontal = 14.dp)
+            .padding(horizontal = 22.dp)
             .fillMaxWidth()
-            .glass(RoundedCornerShape(36.dp))
+            .glass(RoundedCornerShape(38.dp), 1.25f)
             .padding(vertical = 12.dp, horizontal = 8.dp)
             .heightIn(min = S.iconSize.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,

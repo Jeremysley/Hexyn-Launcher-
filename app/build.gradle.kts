@@ -12,8 +12,8 @@ android {
         applicationId = "com.hexyn.launcher"
         minSdk = 27
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5"
+        versionCode = 6
+        versionName = "0.6"
     }
 
     // Fixed key, so a new build installs straight over the old one (no uninstall needed).

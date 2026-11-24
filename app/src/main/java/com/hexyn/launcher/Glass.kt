@@ -56,24 +56,35 @@ fun iconShape(): Shape = when (S.iconStyle) {
 private fun alpha(v: Float): Float = v.coerceIn(0f, 1f)
 
 /**
- * Frosted-glass look: soft dark tint, a white sheen that fades downward,
- * and a thin rim light that is brighter on top. Strength follows the Glass setting.
+ * Frosted-glass look: tint, a sheen that fades downward, a diagonal specular highlight,
+ * and a rim light that is brighter on top. Strength follows the Glass setting.
+ * Light glass uses a white tint; "Reduce effects" drops the highlight layers (faster on weak phones).
  */
 fun Modifier.glass(shape: Shape, strength: Float = 1f): Modifier {
     val k = strength * S.glass
-    return this
-        .clip(shape)
-        .background(Color.Black.copy(alpha = alpha(0.14f * k)))
+    val light = S.glassLight
+    val tint = if (light) Color.White.copy(alpha = alpha(0.22f * k)) else Color.Black.copy(alpha = alpha(0.14f * k))
+    val base = this.clip(shape).background(tint)
+    val rim = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = alpha(0.75f * k)),
+            Color.White.copy(alpha = alpha(0.12f * k)),
+        )
+    )
+    if (S.reduceEffects) {
+        return base.border(1.dp, rim, shape)
+    }
+    return base
         // soft top-to-bottom sheen
         .background(
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = alpha(0.26f * k)),
+                    Color.White.copy(alpha = alpha((if (light) 0.34f else 0.26f) * k)),
                     Color.White.copy(alpha = alpha(0.10f * k)),
                 )
             )
         )
-        // diagonal specular highlight from the top-left corner, like iOS liquid glass
+        // diagonal specular highlight from the top-left corner
         .background(
             Brush.linearGradient(
                 0f to Color.White.copy(alpha = alpha(0.24f * k)),
@@ -81,15 +92,12 @@ fun Modifier.glass(shape: Shape, strength: Float = 1f): Modifier {
                 1f to Color.White.copy(alpha = alpha(0.07f * k)),
             )
         )
-        // bright rim light on top, fading toward the bottom
-        .border(
-            1.dp,
+        // soft reflection band along the bottom edge
+        .background(
             Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = alpha(0.75f * k)),
-                    Color.White.copy(alpha = alpha(0.12f * k)),
-                )
-            ),
-            shape,
+                0.8f to Color.Transparent,
+                1f to Color.White.copy(alpha = alpha(0.10f * k)),
+            )
         )
+        .border(1.dp, rim, shape)
 }
