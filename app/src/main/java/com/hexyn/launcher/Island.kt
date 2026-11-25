@@ -350,10 +350,18 @@ fun DynamicIsland(battery: BatteryInfo, media: MediaState?, activity: ActivitySt
                     indication = null,
                 ) {
                     if (mode == IslandMode.Banner) {
-                        try {
-                            banner?.intent?.send()
-                        } catch (e: Exception) {
-                            // The app can no longer open this notification.
+                        val b = banner
+                        if (b != null) {
+                            val pi = b.intent
+                            if (pi == null) {
+                                openPackage(context, b.packageName)
+                            } else {
+                                try {
+                                    pi.send()
+                                } catch (e: Exception) {
+                                    openPackage(context, b.packageName)
+                                }
+                            }
                         }
                         banner = null
                     } else {

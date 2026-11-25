@@ -108,6 +108,12 @@ fun launchApp(context: Context, view: View, packageName: String, bounds: Rect? =
     }
 }
 
+/** Opens an app by package name (used when a notification has no tap action of its own). */
+fun openPackage(context: Context, packageName: String) {
+    val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
+    startSafely(context, intent)
+}
+
 fun startSafely(context: Context, intent: Intent) {
     try {
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -40,6 +40,8 @@ object S {
     var columns by mutableIntStateOf(4)
     var glass by mutableFloatStateOf(1f)
     var glassLight by mutableStateOf(false)
+    var glassAuto by mutableStateOf(false)
+    var parallax by mutableStateOf(false)
     var reduceEffects by mutableStateOf(false)
     var showWidgets by mutableStateOf(true)
 
@@ -53,6 +55,7 @@ object S {
     var islandNotifications by mutableStateOf(true)
     var islandActivity by mutableStateOf(true)
     var islandBluetooth by mutableStateOf(false)
+    var assistiveTouch by mutableStateOf(false)
     var islandLowBattery by mutableStateOf(true)
     var photoUri by mutableStateOf("")
 
@@ -76,6 +79,8 @@ object S {
         columns = p.getInt("columns", 4)
         glass = p.getFloat("glass", 1f)
         glassLight = p.getBoolean("glassLight", false)
+        glassAuto = p.getBoolean("glassAuto", false)
+        parallax = p.getBoolean("parallax", false)
         reduceEffects = p.getBoolean("reduceEffects", false)
         showWidgets = p.getBoolean("showWidgets", true)
         customStatusBar = p.getBoolean("customStatusBar", true)
@@ -87,6 +92,7 @@ object S {
         islandNotifications = p.getBoolean("islandNotifications", true)
         islandActivity = p.getBoolean("islandActivity", true)
         islandBluetooth = p.getBoolean("islandBluetooth", false)
+        assistiveTouch = p.getBoolean("assistiveTouch", false)
         islandLowBattery = p.getBoolean("islandLowBattery", true)
         photoUri = p.getString("photoUri", "") ?: ""
         calWeekSize = p.getInt("calWeekSize", 13)
@@ -108,6 +114,8 @@ object S {
             ?.putInt("columns", columns)
             ?.putFloat("glass", glass)
             ?.putBoolean("glassLight", glassLight)
+            ?.putBoolean("glassAuto", glassAuto)
+            ?.putBoolean("parallax", parallax)
             ?.putBoolean("reduceEffects", reduceEffects)
             ?.putBoolean("showWidgets", showWidgets)
             ?.putBoolean("customStatusBar", customStatusBar)
@@ -119,6 +127,7 @@ object S {
             ?.putBoolean("islandNotifications", islandNotifications)
             ?.putBoolean("islandActivity", islandActivity)
             ?.putBoolean("islandBluetooth", islandBluetooth)
+            ?.putBoolean("assistiveTouch", assistiveTouch)
             ?.putBoolean("islandLowBattery", islandLowBattery)
             ?.putString("photoUri", photoUri)
             ?.putInt("calWeekSize", calWeekSize)
@@ -133,6 +142,42 @@ object S {
             ?.apply()
     }
 
+    /** All settings as text, for copying as a backup. */
+    fun exportJson(): String {
+        save()
+        val o = org.json.JSONObject()
+        prefs?.all?.forEach { (k, v) -> if (v != null) o.put(k, v) }
+        return "HEXYN-BACKUP\n" + o.toString()
+    }
+
+    /** Restores settings from text made by exportJson(). Returns false if it is not a backup. */
+    fun importJson(context: Context, text: String): Boolean {
+        return try {
+            val body = text.substringAfter("HEXYN-BACKUP", "").trim()
+            if (body.isEmpty()) return false
+            val o = org.json.JSONObject(body)
+            val p = prefs ?: return false
+            val cur = p.all
+            val ed = p.edit()
+            val keys = o.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                when (cur[k]) {
+                    is Int -> ed.putInt(k, o.getInt(k))
+                    is Boolean -> ed.putBoolean(k, o.getBoolean(k))
+                    is Float -> ed.putFloat(k, o.getDouble(k).toFloat())
+                    is String -> ed.putString(k, o.getString(k))
+                    else -> {}
+                }
+            }
+            ed.apply()
+            load(context)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun reset() {
         iconSize = 60
         iconStyle = 0
@@ -140,6 +185,8 @@ object S {
         columns = 4
         glass = 1f
         glassLight = false
+        glassAuto = false
+        parallax = false
         reduceEffects = false
         showWidgets = true
         customStatusBar = true
@@ -151,6 +198,7 @@ object S {
         islandNotifications = true
         islandActivity = true
         islandBluetooth = false
+        assistiveTouch = false
         islandLowBattery = true
         calWeekSize = 13
         calDateSize = 60

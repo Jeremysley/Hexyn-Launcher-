@@ -1,6 +1,12 @@
 package com.hexyn.launcher
 
 import android.Manifest
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import android.widget.Toast
+import android.content.ClipboardManager
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -61,6 +67,9 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
     val context = LocalContext.current
     val hasAccess = remember(resumeTick) { hasListenerAccess(context) }
     val btContext = context
+    var query by remember { mutableStateOf("") }
+    val show: (String) -> Boolean = { text -> query.isBlank() || text.contains(query.trim(), ignoreCase = true) }
+    val hasUsage = remember(resumeTick) { hasUsageAccess(context) }
     val btLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         S.islandBluetooth = granted
         S.save()
@@ -110,11 +119,33 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     .padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Section("Wallpapers") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .glass(RoundedCornerShape(14.dp), 0.9f)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) {
+                            Text("Search settings", color = Color.White.copy(alpha = 0.5f), fontSize = 16.sp)
+                        }
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                            cursorBrush = SolidColor(Color.White),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                if (show("wallpapers background lock home")) Section("Wallpapers") {
                     WallpaperRow()
                 }
 
-                Section("Icons") {
+                if (show("icons shape size columns names labels")) Section("Icons") {
                     ChipRow("Shape", listOf("Squircle", "Rounded", "Circle"), S.iconStyle) {
                         S.iconStyle = it
                         S.save()
@@ -133,13 +164,25 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     }
                 }
 
-                Section("Look") {
+                if (show("look glass theme dark light effects widgets strength")) Section("Look") {
                     SliderRow("Glass strength", S.glass, 0.5f..1.6f, "${(S.glass * 100).roundToInt()}%") {
                         S.glass = it
                         S.save()
                     }
-                    ChipRow("Glass theme", listOf("Dark glass", "Light glass"), if (S.glassLight) 1 else 0) {
-                        S.glassLight = it == 1
+                    ChipRow(
+                        "Glass theme",
+                        listOf("Dark glass", "Light glass", "Auto"),
+                        if (S.glassAuto) 2 else if (S.glassLight) 1 else 0,
+                    ) {
+                        when (it) {
+                            0 -> { S.glassAuto = false; S.glassLight = false }
+                            1 -> { S.glassAuto = false; S.glassLight = true }
+                            else -> S.glassAuto = true
+                        }
+                        S.save()
+                    }
+                    SwitchRow("Wallpaper moves when you swipe pages (apply a wallpaper again after turning on)", S.parallax) {
+                        S.parallax = it
                         S.save()
                     }
                     SwitchRow("Reduce effects (faster on slow phones)", S.reduceEffects) {
@@ -152,7 +195,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     }
                 }
 
-                Section("Status bar and Dynamic Island") {
+                if (show("status bar dynamic island notifications calls camera mic battery bluetooth width height")) Section("Status bar and Dynamic Island") {
                     SwitchRow("iOS-style status bar", S.customStatusBar) {
                         S.customStatusBar = it
                         S.save()
@@ -202,7 +245,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     }
                 }
 
-                Section("Music in the island") {
+                if (show("music notification access spotify island")) Section("Music in the island") {
                     SwitchRow("Show what's playing", S.islandMusic) {
                         S.islandMusic = it
                         S.save()
@@ -247,7 +290,80 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                     }
                 }
 
-                Section("Reset") {
+                if (show("multitasking switcher recent apps assistive touch floating button usage access")) Section("Multitasking") {
+                    SwitchRow("Floating assistive button", S.assistiveTouch) {
+                        S.assistiveTouch = it
+                        S.save()
+                    }
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text(
+                            text = if (hasUsage) "Usage access: granted" else "Usage access: not granted",
+                            color = if (hasUsage) Green else Color(0xFFFF9F0A),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "The App Switcher (swipe up from the very bottom of the home screen) " +
+                                "needs Usage access to know which apps you used recently.",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 13.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Open usage access",
+                            color = Blue,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    startSafely(context, Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                                }
+                                .padding(vertical = 6.dp),
+                        )
+                    }
+                }
+
+                if (show("backup restore copy export import")) Section("Backup") {
+                    Text(
+                        text = "Copy settings backup",
+                        color = Blue,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                val cm = context.getSystemService(ClipboardManager::class.java)
+                                cm.setPrimaryClip(ClipData.newPlainText("Hexyn backup", S.exportJson()))
+                                Toast.makeText(context, "Settings copied. Paste them somewhere safe.", Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(vertical = 12.dp),
+                    )
+                    Text(
+                        text = "Restore from clipboard",
+                        color = Blue,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                val cm = context.getSystemService(ClipboardManager::class.java)
+                                val text = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+                                val ok = S.importJson(context, text)
+                                Toast.makeText(
+                                    context,
+                                    if (ok) "Settings restored" else "No Hexyn backup found in the clipboard",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                            .padding(vertical = 12.dp),
+                    )
+                }
+
+                if (show("reset default")) Section("Reset") {
                     Text(
                         text = "Reset all settings to default",
                         color = Color(0xFFFF453A),
@@ -262,7 +378,7 @@ fun SettingsScreen(resumeTick: Int, onClose: () -> Unit) {
                 }
 
                 Text(
-                    text = "Hexyn Launcher 0.8",
+                    text = "Hexyn Launcher 1.0",
                     color = Color.White.copy(alpha = 0.4f),
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -375,6 +491,15 @@ private fun WallpaperRow() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            status = "Applying your photo..."
+            scope.launch {
+                val ok = applyWallpaperFromUri(context, uri)
+                status = if (ok) "Applied your photo" else "Could not set wallpaper"
+            }
+        }
+    }
 
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(
@@ -405,7 +530,7 @@ private fun WallpaperRow() {
                             .clickable {
                                 status = "Applying ${preset.name}..."
                                 scope.launch {
-                                    val ok = applyWallpaper(context, preset)
+                                    val ok = applyWallpaper(context, preset, S.parallax)
                                     status = if (ok) "Applied: ${preset.name}" else "Could not set wallpaper"
                                 }
                             }
@@ -419,6 +544,17 @@ private fun WallpaperRow() {
                 }
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Choose from my photos",
+            color = Blue,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { photoPicker.launch("image/*") }
+                .padding(vertical = 6.dp),
+        )
         if (status.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text(text = status, color = Green, fontSize = 13.sp)

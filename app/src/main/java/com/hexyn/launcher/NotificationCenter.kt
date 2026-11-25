@@ -60,10 +60,16 @@ fun NotificationCenter(resumeTick: Int, onClose: () -> Unit) {
     val dateText = remember(now / 60_000L) { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(now)) }
 
     val openItem: (NotifItem) -> Unit = { n ->
-        try {
-            n.intent?.send()
-        } catch (e: Exception) {
-            // The app can no longer open this notification.
+        val pi = n.intent
+        if (pi == null) {
+            openPackage(context, n.packageName)
+        } else {
+            try {
+                pi.send()
+            } catch (e: Exception) {
+                // The notification's own action is gone: just open the app.
+                openPackage(context, n.packageName)
+            }
         }
         onClose()
     }

@@ -1,5 +1,6 @@
 package com.hexyn.launcher
 
+import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 val ShadowText = TextStyle(
@@ -60,6 +62,8 @@ fun LauncherScreen(
     var searchOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var notifOpen by remember { mutableStateOf(false) }
+    var switcherOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var widgetEdit by remember { mutableStateOf(-1) } // -1 none, 0 calendar, 1 clock
     var folder by remember { mutableStateOf<String?>(null) }
     val battery = rememberBattery()
@@ -78,17 +82,47 @@ fun LauncherScreen(
     val pages = remember(homeApps, S.columns, S.showWidgets) { paginate(homeApps) }
     val pagerState = rememberPagerState(pageCount = { pages.size + 1 })
 
+    // Automatic glass theme: follows the phone's dark / light mode.
+    val systemDark = isSystemInDarkTheme()
+    LaunchedEffect(systemDark, S.glassAuto) {
+        if (S.glassAuto) S.glassLight = !systemDark
+    }
+
+    // Wallpaper parallax: the wallpaper slides a little as you swipe between pages.
+    val hostView = LocalView.current
+    LaunchedEffect(S.parallax, pagerState) {
+        val wm = WallpaperManager.getInstance(context)
+        if (!S.parallax) {
+            try {
+                wm.setWallpaperOffsets(hostView.windowToken, 0.5f, 0.5f)
+            } catch (e: Exception) {
+                // Not supported here.
+            }
+        } else {
+            snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }
+                .collect { pos ->
+                    val steps = (pagerState.pageCount - 1).coerceAtLeast(1)
+                    try {
+                        wm.setWallpaperOffsets(hostView.windowToken, (pos / steps).coerceIn(0f, 1f), 0.5f)
+                    } catch (e: Exception) {
+                        // Not supported here.
+                    }
+                }
+        }
+    }
+
     LaunchedEffect(homeTick) {
         controlOpen = false
         searchOpen = false
         settingsOpen = false
         notifOpen = false
+        switcherOpen = false
         widgetEdit = -1
         folder = null
         if (homeTick > 0) pagerState.animateScrollToPage(0)
     }
 
-    val overlayOpen = controlOpen || notifOpen || searchOpen || settingsOpen || folder != null
+    val overlayOpen = controlOpen || notifOpen || switcherOpen || searchOpen || settingsOpen || folder != null
     BackHandler(enabled = overlayOpen || widgetEdit >= 0) {
         when {
             widgetEdit >= 0 -> widgetEdit = -1
@@ -97,6 +131,7 @@ fun LauncherScreen(
             else -> {
                 controlOpen = false
                 notifOpen = false
+                switcherOpen = false
                 searchOpen = false
             }
         }
@@ -139,6 +174,7 @@ fun LauncherScreen(
                 onOpenSearch = { searchOpen = true },
                 onOpenControl = { controlOpen = true },
                 onOpenNotifications = { notifOpen = true },
+                onOpenSwitcher = { switcherOpen = true },
                 onOpenFolder = { folder = it },
                 onEditCalendar = { widgetEdit = 0 },
                 onEditClock = { widgetEdit = 1 },
@@ -170,6 +206,14 @@ fun LauncherScreen(
             exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { -it / 8 },
         ) {
             NotificationCenter(resumeTick = resumeTick, onClose = { notifOpen = false })
+        }
+
+        AnimatedVisibility(
+            visible = switcherOpen,
+            enter = fadeIn(tween(200)) + scaleIn(tween(250), initialScale = 0.92f),
+            exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.92f),
+        ) {
+            SwitcherOverlay(apps = apps, resumeTick = resumeTick, onClose = { switcherOpen = false })
         }
 
         AnimatedVisibility(
@@ -209,6 +253,17 @@ fun LauncherScreen(
             WidgetEditor(kind = widgetEdit, onClose = { widgetEdit = -1 })
         }
 
+        if (S.assistiveTouch && !overlayOpen && widgetEdit < 0) {
+            AssistiveTouch(
+                onNotifications = { notifOpen = true },
+                onControl = { controlOpen = true },
+                onSwitcher = { switcherOpen = true },
+                onSearch = { searchOpen = true },
+                onHome = { scope.launch { pagerState.animateScrollToPage(0) } },
+                onSettings = { settingsOpen = true },
+            )
+        }
+
         if (S.customStatusBar) IosStatusBar(battery)
         if (S.islandEnabled) DynamicIsland(battery, media, activity)
     }
@@ -226,6 +281,7 @@ fun HomeLayer(
     onOpenSearch: () -> Unit,
     onOpenControl: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenSwitcher: () -> Unit,
     onOpenFolder: (String) -> Unit,
     onEditCalendar: () -> Unit,
     onEditClock: () -> Unit,
@@ -252,7 +308,10 @@ fun HomeLayer(
                         startY = offset.y
                     },
                     onDragEnd = {
-                        if (gesturesEnabled && total > 140f) {
+                        if (gesturesEnabled && total < -140f && startY > size.height * 0.8f) {
+                            // Swipe up from the very bottom: App Switcher.
+                            onOpenSwitcher()
+                        } else if (gesturesEnabled && total > 140f) {
                             // Upper part of the screen: left half = Notifications,
                             // right half = Control Center. Lower part = Spotlight search.
                             when {

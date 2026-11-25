@@ -1,3 +1,15 @@
+## New in 1.0
+- Wallpapers: 14 built-in wallpapers plus "Choose from my photos".
+- Glass theme: Dark, Light or Auto (follows the phone's dark mode).
+- Optional wallpaper parallax when swiping pages.
+- Includes everything from 0.6 to 0.9.
+
+## New in 0.9
+- App Switcher: swipe up from the very bottom of the home screen. Cards for recent apps, tap to open, swipe a card up to close it. Needs Usage access.
+- Floating assistive button (optional, Settings > Multitasking): drag it anywhere, tap for a shortcut menu.
+- Settings: search box, Multitasking section, backup (copy to clipboard) and restore.
+- 0.8.1: tapping a notification always opens its app.
+
 ## New in 0.8
 - Widget stack: swipe the right widget sideways for Clock, Battery, Music and Photo (hold the photo widget to choose a picture).
 - Dynamic Island: low-battery warning (20/10/5%) and Bluetooth connected popup (permission asked in Settings).
